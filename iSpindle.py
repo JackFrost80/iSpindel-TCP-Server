@@ -167,7 +167,6 @@ FORWARD = int(get_config_from_sql('FORWARD', 'ENABLE_FORWARD'))
 FORWARDADDR = get_config_from_sql('FORWARD', 'FORWARDADDR')
 FORWARDPORT =  int(get_config_from_sql('FORWARD', 'FORWARDPORT'))
 
-
 # Fermentrack
 FERMENTRACK = int(get_config_from_sql('FERMENTRACK', 'ENABLE_FERMENTRACK'))
 FERM_USE_ISPINDLE_TOKEN = int(get_config_from_sql('FERMENTRACK', 'FERM_USE_ISPINDLE_TOKEN'))
@@ -256,6 +255,9 @@ def handler(clientsock, addr):
     rssi = 0
     timestart = time.clock()
     config_sent = 0
+    pressure = 0.0
+    carbondioxid = 0.0
+    gauge = 0
 
     while 1:
         data = clientsock.recv(BUFF)
@@ -275,24 +277,34 @@ def handler(clientsock, addr):
             if inpstr.find("}") != -1:
                 jinput = json.loads(inpstr)
                 spindle_name = jinput['name']
-                spindle_id = jinput['ID']
-                angle = jinput['angle']
-                temperature = jinput['temperature']
-                battery = jinput['battery']
+                if spindle_name.find("iGauge") == -1:
+                    gauge = 0
+                    spindle_id = jinput['ID']
+                    angle = jinput['angle']
+                    temperature = jinput['temperature']
+                    battery = jinput['battery']
 
-                try:
-                    gravity = jinput['gravity']
-                    interval = jinput['interval']
-                    rssi = jinput['RSSI']
-                except:
+                    try:
+                        gravity = jinput['gravity']
+                        interval = jinput['interval']
+                        rssi = jinput['RSSI']
+                    except:
                     # older firmwares might not be transmitting all of these
-                    dbgprint("Consider updating your iSpindel's Firmware.")
-                try:
+                        dbgprint("Consider updating your iSpindel's Firmware.")
+                    try:
                     # get user token for connection to ispindle.de public server
-                    user_token = jinput['token']
-                except:
+                        user_token = jinput['token']
+                    except:
                     # older firmwares < 5.4 or field not filled in
-                    user_token = '*'
+                        user_token = '*'
+                else:
+                    spindle_id = jinput['ID']
+                    pressure = jinput['pressure']
+                    temperature = jinput['temperature']
+                    carbondioxid = jinput['carbondioxid']
+                    #interval = jinput['interval']
+                    rssi = jinput['RSSI']
+                    gauge = 1
                 # looks like everything went well :)
                 #
                 # Should we reply with a config JSON?
@@ -391,26 +403,26 @@ def handler(clientsock, addr):
         # Otherwise leave this 0 and just use "tilt" in CBPI3
         CRAFTBEERPI3_SEND_ANGLE = int(get_config_from_sql('CRAFTBEERPI3', 'CRAFTBEERPI3_SEND_ANGLE', spindle_name))
 
-        if CSV:
-	    dbgprint(repr(addr) + ' - writing CSV')
-	    recipe = 'n/a'
-	    try:
+        if CSV and igauge == 0:
+            dbgprint(repr(addr) + ' - writing CSV')
+            recipe = 'n/a'
+            try:
 		#   dbgprint(repr(addr) + ' Reading last recipe name for corresponding Spindel' + spindle_name)
 		#   Get the Recipe name from the last reset for the spindel that has sent data
-		    import mysql.connector
-		    cnx = mysql.connector.connect(user=SQL_USER, port=SQL_PORT, password=SQL_PASSWORD, host=SQL_HOST, database=SQL_DB)
-		    cur = cnx.cursor()
-		    sqlselect="SELECT Data.Recipe FROM Data WHERE Data.Name = '"+spindle_name+"' AND Data.Timestamp >= (SELECT max( Data.Timestamp )FROM Data WHERE Data.Name = '"+spindle_name+"' AND Data.ResetFlag = true) LIMIT 1;"
-		    cur.execute(sqlselect)
-		    recipe_names = cur.fetchone()
-		    cur.close()
-		    cnx.close()
-		    recipe = str(recipe_names[0])
-		    dbgprint('Recipe Name: Done. ' + recipe )
-	    except Exception as e:
-		dbgprint(repr(addr) + ' Recipe Name not found - CSV Error: ' + str(e))
+                import mysql.connector
+                cnx = mysql.connector.connect(user=SQL_USER, port=SQL_PORT, password=SQL_PASSWORD, host=SQL_HOST, database=SQL_DB)
+                cur = cnx.cursor()
+                sqlselect="SELECT Data.Recipe FROM Data WHERE Data.Name = '"+spindle_name+"' AND Data.Timestamp >= (SELECT max( Data.Timestamp )FROM Data WHERE Data.Name = '"+spindle_name+"' AND Data.ResetFlag = true) LIMIT 1;"
+                cur.execute(sqlselect)
+                recipe_names = cur.fetchone()
+                cur.close()
+                cnx.close()
+                recipe = str(recipe_names[0])
+                dbgprint('Recipe Name: Done. ' + recipe )
+            except Exception as e:
+                dbgprint(repr(addr) + ' Recipe Name not found - CSV Error: ' + str(e))
 
-	    try:
+            try:
                 filename = OUTPATH + spindle_name + '_' + str(spindle_id) + '.csv'
                 with open(filename, 'a') as csv_file:
                     # this would sort output. But we do not want that...
@@ -430,7 +442,7 @@ def handler(clientsock, addr):
                     outstr += user_token + DELIMITER
                     outstr += str(interval) + DELIMITER
                     outstr += str(rssi) + DELIMITER
-		    outstr += recipe
+                    outstr += recipe
                     outstr += NEWLINE
                     csv_file.writelines(outstr)
                     dbgprint(repr(addr) + ' - CSV data written.')
@@ -438,29 +450,37 @@ def handler(clientsock, addr):
                 dbgprint(repr(addr) + ' CSV Error: ' + str(e))
 
         if SQL:
-	    recipe = 'n/a'
-	    try:
-		dbgprint(repr(addr) + ' Reading last recipe name for corresponding Spindel' + spindle_name)
+            recipe = 'n/a'
+            try:
+                dbgprint(repr(addr) + ' Reading last recipe name for corresponding Spindel' + spindle_name)
 		# Get the recipe name from last reset for the spindel that has sent data
-		import mysql.connector
-		cnx = mysql.connector.connect(user=SQL_USER, port=SQL_PORT, password=SQL_PASSWORD, host=SQL_HOST, database=SQL_DB)
-		cur = cnx.cursor()
-		sqlselect="SELECT Data.Recipe FROM Data WHERE Data.Name = '"+spindle_name+"' AND Data.Timestamp >= (SELECT max( Data.Timestamp )FROM Data WHERE Data.Name = '"+spindle_name+"' AND Data.ResetFlag = true) LIMIT 1;"
-		cur.execute(sqlselect)
-		recipe_names = cur.fetchone()
-		cur.close()
-		cnx.close()
-		recipe = str(recipe_names[0])
-		dbgprint('Recipe Name: Done. ' + recipe )
-	    except Exception as e:
-		dbgprint(repr(addr) + ' Recipe Name not found - CSV Error: ' + str(e))
+                import mysql.connector
+                cnx = mysql.connector.connect(user=SQL_USER, port=SQL_PORT, password=SQL_PASSWORD, host=SQL_HOST, database=SQL_DB)
+                cur = cnx.cursor()
+                if gauge == 0 :
+                    sqlselect="SELECT Data.Recipe FROM Data WHERE Data.Name = '"+spindle_name+"' AND Data.Timestamp >= (SELECT max( Data.Timestamp )FROM Data WHERE Data.Name = '"+spindle_name+"' AND Data.ResetFlag = true) LIMIT 1;"
+                else:
+                    sqlselect="SELECT iGauge.Recipe,iGauge.First_value FROM iGauge WHERE iGauge.Name = '"+spindle_name+"' AND iGauge.Timestamp >= (SELECT max( iGauge.Timestamp )FROM iGauge WHERE iGauge.Name = '"+spindle_name+"' AND iGauge.ResetFlag = true) LIMIT 1;"
 
-	    try:
+                cur.execute(sqlselect)
+                recipe_names = cur.fetchone()
+                cur.close()
+                cnx.close()
+                recipe = str(recipe_names[0])
+                dbgprint('Recipe Name: Done. ' + recipe )
+            except Exception as e:
+                dbgprint(repr(addr) + ' Recipe Name not found - CSV Error: ' + str(e))
+
+            try:
                 import mysql.connector
                 dbgprint(repr(addr) + ' - writing to database')
                 # standard field definitions:
-                fieldlist = ['Timestamp', 'Name', 'ID', 'Angle', 'Temperature', 'Battery', 'Gravity', 'Recipe']
-                valuelist = [datetime.now(), spindle_name, spindle_id, angle, temperature, battery, gravity, recipe]
+                if gauge == 0 :
+                    fieldlist = ['Timestamp', 'Name', 'ID', 'Angle', 'Temperature', 'Battery', 'Gravity', 'Recipe']
+                    valuelist = [datetime.now(), spindle_name, spindle_id, angle, temperature, battery, gravity, recipe]
+                else:
+                    fieldlist = ['Timestamp', 'Name', 'ID', 'Pressure', 'Temperature', 'Carbondioxid', 'Recipe']
+                    valuelist = [datetime.now(), spindle_name, spindle_id, pressure, temperature, carbondioxid, recipe]
 
                 # do we have a user token defined? (Fw > 5.4.x)
                 # this is for later use (public server) but if it exists, let's store it for testing purposes
@@ -513,7 +533,10 @@ def handler(clientsock, addr):
                 # gather the data now and send it to the database
                 fieldstr = ', '.join(fieldlist)
                 valuestr = ', '.join(['%s' for x in valuelist])
-                add_sql = 'INSERT INTO Data (' + fieldstr + ')'
+                if gauge == 0 :
+                    add_sql = 'INSERT INTO Data (' + fieldstr + ')'
+                else:
+                    add_sql = 'INSERT INTO iGauge (' + fieldstr + ')'
                 add_sql += ' VALUES (' + valuestr + ')'
                 #dbgprint(add_sql)
                 #dbgprint(valuelist)
@@ -525,7 +548,7 @@ def handler(clientsock, addr):
             except Exception as e:
                 dbgprint(repr(addr) + ' Database Error: ' + str(e) + NEWLINE + 'Did you update your database?')
 
-        if BREWPILESS:
+        if BREWPILESS and igauge == 0:
             try:
                 dbgprint(repr(addr) + ' - forwarding to BREWPILESS at http://' + BREWPILESSADDR)
                 import urllib2
@@ -548,7 +571,7 @@ def handler(clientsock, addr):
             except Exception as e:
                 dbgprint(repr(addr) + ' Error while forwarding to URL ' + url + ' : ' + str(e))
 
-        if CRAFTBEERPI3:
+        if CRAFTBEERPI3 and igauge == 0:
             try:
                 dbgprint(repr(addr) + ' - forwarding to CraftBeerPi3 at http://' + CRAFTBEERPI3ADDR)
                 import urllib2
@@ -559,19 +582,19 @@ def handler(clientsock, addr):
                     'battery' : battery,
                 }
                 out = json.dumps(outdata)
-		dbgprint(repr(addr) + ' - sending: ' + out)
-		url = 'http://' + CRAFTBEERPI3ADDR + '/api/hydrometer/v1/data'
-		req = urllib2.Request(url)
-		req.add_header('Content-Type', 'application/json')
-		req.add_header('User-Agent', spindle_name)
-		response = urllib2.urlopen(req, out)
-		dbgprint(repr(addr) + ' - received: ' + response.read())
+                dbgprint(repr(addr) + ' - sending: ' + out)
+                url = 'http://' + CRAFTBEERPI3ADDR + '/api/hydrometer/v1/data'
+                req = urllib2.Request(url)
+                req.add_header('Content-Type', 'application/json')
+                req.add_header('User-Agent', spindle_name)
+                response = urllib2.urlopen(req, out)
+                dbgprint(repr(addr) + ' - received: ' + response.read())
 
             except Exception as e:
                 dbgprint(repr(addr) + ' Error while forwarding to URL ' + url + ' : ' + str(e))
 
 
-        if UBIDOTS:
+        if UBIDOTS and igauge == 0:
             try:
                 if UBI_USE_ISPINDLE_TOKEN:
                     token = user_token
@@ -600,7 +623,7 @@ def handler(clientsock, addr):
             except Exception as e:
                 dbgprint(repr(addr) + ' Ubidots Error: ' + str(e))
 
-        if FORWARD:
+        if FORWARD and igauge == 0:
             try:
                 dbgprint(repr(addr) + ' - forwarding to ' + FORWARDADDR)
                 outdata = {
@@ -631,7 +654,7 @@ def handler(clientsock, addr):
             except Exception as e:
                 dbgprint(repr(addr) + ' Error while forwarding to ' + FORWARDADDR + ': ' + str(e))
 
-        if FERMENTRACK:
+        if FERMENTRACK and igauge == 0:
             try:
                 if FERM_USE_ISPINDLE_TOKEN:
                     token = user_token
