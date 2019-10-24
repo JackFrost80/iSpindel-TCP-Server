@@ -279,8 +279,15 @@ def handler(clientsock, addr):
             if inpstr.find("}") != -1:
                 jinput = json.loads(inpstr)
                 spindle_name = jinput['name']
-                if spindle_name.find("iGauge") == -1:
+                if 'type' in jinput:
+                    dbgprint("detected eManometer")
+                    gauge = 1
+                else:
                     gauge = 0
+                    dbgprint("detected iSpindel")
+                if gauge == 0:
+                    
+
                     spindle_id = jinput['ID']
                     angle = jinput['angle']
                     temperature = jinput['temperature']
