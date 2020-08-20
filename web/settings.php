@@ -1,5 +1,5 @@
 <?php
-
+// error reporting
 ini_set('display_errors', 'On');
 error_reporting(E_ALL | E_STRICT);
     
@@ -17,18 +17,21 @@ error_reporting(E_ALL | E_STRICT);
 // Self-called by submit button. Calls landing page on stop
 
 // load information for sql connection
-if ((include_once './config/common_db_config.php') == FALSE){
-       include_once("./config/common_db_default.php");
+if ((include_once '../config/common_db_config.php') == FALSE){
+       include_once("../config/common_db_default.php");
     }
 // load db query functions
 include_once("include/common_db_query.php");
 
+// include phpmailer scripts for testing the email functionality
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
-
 require "../PHPMailer/src/Exception.php";
 require "../PHPMailer/src/PHPMailer.php";
 require "../PHPMailer/src/SMTP.php";
+
+// get selected layout style for css from settings table
+$document_class = get_color_scheme($conn);
 
 // Get fields from database in language selected in settings
 $file = "settings";
@@ -51,7 +54,7 @@ $import = get_field_from_sql($conn,$file,"import");
 $database_header = get_field_from_sql($conn,$file,"database_header");
 $settings_header = get_field_from_sql($conn,$file,"settings_header");
 
-
+// retrieve or define _GET parameters for section and device
 // if parameter section not set, '0' for first section in config is default to be displayed
 if(!isset($_GET['section'])) $_GET['section'] = '0'; else $_GET['section'] = $_GET['section'];
 if(!isset($_GET['device'])) $_GET['device'] = '0'; else $_GET['device'] = $_GET['device'];
@@ -70,14 +73,16 @@ if (isset($_POST['Stop']))
 
     }
 
+// self called: fucntion to export data and archive table
 if (isset($_POST['Export_Data']))
     {
         $today = date("Y_m_d");
         $export_name=$today."_iSpindle_Data.sql";
-        $tables = array("Data","Archive");
+        $tables = array("Data","Archive","Calibration");
         export_data_table($tables,$export_name);
     }
 
+// self called: fucntion to export individual settings es csv file
 if (isset($_POST['Export_Settings']))
     {
         $today = date("Y_m_d");
@@ -85,43 +90,53 @@ if (isset($_POST['Export_Settings']))
         export_settings($conn,"Settings",$export_name);
     }
 
+// self called: fucntion to import data and archive table
 if (isset($_POST['Import_Data']))
     {
         $filename = $_FILES["fileupload"]["name"];
         $filename_tmp = $_FILES["fileupload"]["tmp_name"];      
         $file_type=$_FILES['fileupload']['type'];
         $file_ext=strtolower(pathinfo($_FILES['fileupload']['name'], PATHINFO_EXTENSION));
-      
+
+       write_log("Filename:".$filename);
+       write_log("Filename_tmp:".$filename_tmp);
+
+// only sql is allowed as extension      
         $extensions= array("sql");
       
       if(in_array($file_ext,$extensions)=== false){
+// Error message displayed and exit (different languages to be added later)
          echo "Extension not allowed, please choose a sql file.";
          exit;
       }
-//      echo $filename;
-//      exit;
+// filename needs to contain iSpindle_Data to be loaded
       if(strpos($filename,"iSpindle_Data")=== false){
+// Error message displayed and exit (different languages to be added later)
          echo "Wrong Database Filename. Must end with iSpindle_Data.sql";
          exit;
       }
-      import_table($conn,"Data, Archive",$filename_tmp);
+      import_table($conn,"Data, Archive, Calibration",$filename_tmp);
     }
 
+// self caled: Settings can be imported from previous export
 if (isset($_POST['Import_Settings']))
     {
         $filename = $_FILES["settingsupload"]["name"];
         $filename_tmp = $_FILES["settingsupload"]["tmp_name"];
         $file_type=$_FILES['settingsupload']['type'];
         $file_ext=strtolower(pathinfo($_FILES['settingsupload']['name'], PATHINFO_EXTENSION));
+       write_log("Filename:".$filename);
+       write_log("Filename_tmp:".$filename_tmp);
 
+
+// extension has to be csv
         $extensions= array("csv");
 
       if(in_array($file_ext,$extensions)=== false){
          echo "Extension not allowed, please choose a csv file.";
          exit;
       }
-//      echo $filename;
-//      exit;
+// filename has to contain iSpindle_Settings to be imported
       if(strpos($filename,"iSpindle_Settings")=== false){
          echo "Wrong Settings Filename. Must end with iSpindle_Settings.csv";
          exit;
@@ -134,44 +149,42 @@ if (isset($_POST['Import_Settings']))
 // Function to send testmail
 if (isset($_POST['Testmail']))
     {
-# retrieve email settings from Database (Global and not per device)
-$fromaddr = get_settings_from_sql($conn, 'EMAIL','GLOBAL','FROMADDR');
-$toaddr = get_settings_from_sql($conn, 'EMAIL','GLOBAL','TOADDR');
-$passwd = get_settings_from_sql($conn, 'EMAIL','GLOBAL','PASSWD');
-$smtpserver = get_settings_from_sql($conn, 'EMAIL','GLOBAL','SMTPSERVER');
-$smtpport = get_settings_from_sql($conn, 'EMAIL','GLOBAL','SMTPPORT');
-$debug = get_settings_from_sql($conn, 'EMAIL','GLOBAL','ENABLEDEBUG');
+    # retrieve email settings from Database (Global and not per device)
+    $fromaddr = get_settings_from_sql($conn, 'EMAIL','GLOBAL','FROMADDR');
+    $toaddr = get_settings_from_sql($conn, 'EMAIL','GLOBAL','TOADDR');
+    $passwd = get_settings_from_sql($conn, 'EMAIL','GLOBAL','PASSWD');
+    $smtpserver = get_settings_from_sql($conn, 'EMAIL','GLOBAL','SMTPSERVER');
+    $smtpport = get_settings_from_sql($conn, 'EMAIL','GLOBAL','SMTPPORT');
+    $debug = get_settings_from_sql($conn, 'EMAIL','GLOBAL','ENABLEDEBUG');
 
-$mail = new PHPMailer(true);                              // Passing `true` enables exceptions
-try {
-    //Server settings
-    $mail->SMTPDebug = $debug;                                 // Enable verbose debug output
-    $mail->isSMTP();                                      // Set mailer to use SMTP
-    $mail->Host = $smtpserver;                   // Specify main and backup SMTP servers
-    $mail->SMTPAuth = true;                               // Enable SMTP authentication
-    $mail->Username = $fromaddr;              // SMTP username
-    $mail->Password = $passwd;                           // SMTP password
-    $mail->SMTPSecure = 'tls';                            // Enable TLS encryption, `ssl` also accepted
-    $mail->Port = $smtpport;                                    // TCP port to connect to
+    $mail = new PHPMailer(true);                              // Passing `true` enables exceptions
+    try {
+        //Server settings
+        $mail->SMTPDebug = $debug;                                 // Enable verbose debug output
+        $mail->isSMTP();                                      // Set mailer to use SMTP
+        $mail->Host = $smtpserver;                   // Specify main and backup SMTP servers
+        $mail->SMTPAuth = true;                               // Enable SMTP authentication
+        $mail->Username = $fromaddr;              // SMTP username
+        $mail->Password = $passwd;                           // SMTP password
+        $mail->SMTPSecure = 'tls';                            // Enable TLS encryption, `ssl` also accepted
+        $mail->Port = $smtpport;                                    // TCP port to connect to
 
-    //Recipients
-    $mail->setFrom($fromaddr);          //This is the email your form sends From
-    $mail->addAddress($toaddr); // Add a recipient address
+        //Recipients
+        $mail->setFrom($fromaddr);          //This is the email your form sends From
+        $mail->addAddress($toaddr); // Add a recipient address
 
-    //Content
-    $mail->isHTML(true);                                  // Set email format to HTML
-    $mail->Subject = 'Testmail from iSpindle TCP Server';
-    $mail->Body    = 'Testmail has been sent from your iSpindle Server';
+        //Content
+        $mail->isHTML(true);                                  // Set email format to HTML
+        $mail->Subject = 'Testmail from iSpindle TCP Server';
+        $mail->Body    = 'Testmail has been sent from your iSpindle Server';
 
-    $mail->send();
-//    echo 'Message has been sent';
-
-    } 
-catch (Exception $e) {
-    echo 'Message could not be sent.';
-    echo 'Mailer Error: ' . $mail->ErrorInfo;
+        $mail->send();
+        } 
+    catch (Exception $e) {
+        echo 'Message could not be sent.';
+        echo 'Mailer Error: ' . $mail->ErrorInfo;
+        }
     }
-}
 
 
 // self caled function: if delete button is selected, individual settings for selected device will be deleted
@@ -216,6 +229,28 @@ if (isset($_POST['Add']))
         header("Location: ".$url);
     }
 
+// self caled function: if send button clicked, selected Layout will be activated in database
+if (isset($_POST['GoLayout']))
+{
+    $parameter=$_POST['colorscheme'];
+    $current_Sid = $_POST['current_Sid'];
+    $current_Did = $_POST['current_Did'];
+    write_log($parameter);
+
+    // remove all color schme settings from settings table
+    $del_color_scheme="UPDATE Settings SET value = '' WHERE Parameter LIKE 'COLORSCHEME_%'";
+    $result=mysqli_query($conn, $del_color_scheme) or die(mysqli_error($conn));
+    // write new colorschme selection to settings table
+    $change_color_scheme="UPDATE Settings SET value = '1' WHERE Parameter = '$parameter'";
+    $result=mysqli_query($conn, $change_color_scheme) or die(mysqli_error($conn));
+    // reload settings page with current section and device
+    $url="http://";
+    $url .= $_SERVER['HTTP_HOST'].dirname($_SERVER['PHP_SELF'])."/";
+    $url .= "settings.php?section=".$current_Sid . "&device=" . $current_Did;
+    // open the page
+    header("Location: ".$url);
+
+}
 
 // self caled function: if send button is selected, values will be written to database
 if (isset($_POST['Go']))
@@ -251,54 +286,55 @@ if (isset($_POST['Go']))
         // open the page
         header("Location: ".$url);
     }
-    // set utf-8 charset for DB connection to ensure correct display of special characters like umlauts
-    mysqli_set_charset($conn, "utf8");
-    // get language setting from database to define the description field displayed in the table
-    $sql_language = mysqli_query($conn, "SELECT value FROM Settings WHERE Section = 'GENERAL' AND Parameter = 'LANGUAGE'") or die(mysqli_error($conn));
-    $LANGUAGE = mysqli_fetch_array($sql_language);
-    $DESCRIPTION = "Description_".$LANGUAGE[0]; 
+
+
+// set utf-8 charset for DB connection to ensure correct display of special characters like umlauts
+mysqli_set_charset($conn, "utf8");
+
+// get language setting from database to define the description field displayed in the table
+$sql_language = mysqli_query($conn, "SELECT value FROM Settings WHERE Section = 'GENERAL' AND Parameter = 'LANGUAGE'") or die(mysqli_error($conn));
+$LANGUAGE = mysqli_fetch_array($sql_language);
+$DESCRIPTION = "Description_".$LANGUAGE[0]; 
     
-    // Load all parameers and descriptions for rows where german description is not empty
-    // rows with empty description are for internal use (e.g. used by sendmail)
-    $sql_q = "SELECT * FROM Settings WHERE Description_DE <> '' ORDER BY DeviceName, Section, Parameter";
-    // set utf-8 charset for DB connection to ensure correct display of special characters like umlauts
-    mysqli_set_charset($conn, "utf8");
-    $result=mysqli_query($conn, $sql_q) or die(mysqli_error($conn));
+// Load all parameers and descriptions for rows where german description is not empty
+// rows with empty description are for internal use (e.g. used by sendmail)
+$sql_q = "SELECT * FROM Settings WHERE Description_DE <> '' ORDER BY DeviceName, Section, Parameter";
+// set utf-8 charset for DB connection to ensure correct display of special characters like umlauts
+mysqli_set_charset($conn, "utf8");
+$result=mysqli_query($conn, $sql_q) or die(mysqli_error($conn));
     
-    // Load all sections to be displayed in the selection field of the table
-    $sql_q1 = "SELECT DISTINCT Section FROM Settings WHERE Description_DE <> ''";
-    // set utf-8 charset for DB connection to ensure correct display of special characters like umlauts
-    mysqli_set_charset($conn, "utf8");
-    $result1 = mysqli_query($conn, $sql_q1) or die(mysqli_error($conn));
-    
-    // Define array for sections to be displayed in the select field 
-    $sections = array(); 
-    while($row_s = mysqli_fetch_assoc($result1) ) {
-        $sections[] = $row_s['Section'];
+// Load all sections to be displayed in the selection field of the table
+$sql_q1 = "SELECT DISTINCT Section FROM Settings WHERE Description_DE <> ''";
+// set utf-8 charset for DB connection to ensure correct display of special characters like umlauts
+mysqli_set_charset($conn, "utf8");
+$result1 = mysqli_query($conn, $sql_q1) or die(mysqli_error($conn));
+   
+// Define array for sections to be displayed in the select field 
+$sections = array(); 
+while($row_s = mysqli_fetch_assoc($result1) ) {
+    $sections[] = $row_s['Section'];
     }
 
-    // Load all devices from settings table to be displayed in the device field of the table
-    $sql_q2 = "SELECT DISTINCT DeviceName FROM Settings WHERE Description_DE <> ''";
-    // set utf-8 charset for DB connection to ensure correct display of special characters like umlauts
-    mysqli_set_charset($conn, "utf8");
-    $result2 = mysqli_query($conn, $sql_q2) or die(mysqli_error($conn));
+// Load all devices from settings table to be displayed in the device field of the table
+$sql_q2 = "SELECT DISTINCT DeviceName FROM Settings WHERE Description_DE <> ''";
+// set utf-8 charset for DB connection to ensure correct display of special characters like umlauts
+mysqli_set_charset($conn, "utf8");
+$result2 = mysqli_query($conn, $sql_q2) or die(mysqli_error($conn));
 
-    // Define array for sections to be displayed in the select field
-    $devices = array();
-    while($row_d = mysqli_fetch_assoc($result2) ) {
-        $devices[] = $row_d['DeviceName'];
+// Define array for sections to be displayed in the select field
+$devices = array();
+while($row_d = mysqli_fetch_assoc($result2) ) {
+    $devices[] = $row_d['DeviceName'];
     }
 
-    // Load List of all availble devices from Database
-    $sql_q3 = "SELECT max(Timestamp), Name FROM Data WHERE NOT Name IN (SELECT DISTINCT DeviceName FROM Settings WHERE Description_DE <> '') GROUP BY Name";
-    $result3 = mysqli_query($conn, $sql_q3) or die(mysqli_error($conn));
+// Load List of all availble devices from Database
+$sql_q3 = "SELECT max(Timestamp), Name FROM Data WHERE NOT Name IN (SELECT DISTINCT DeviceName FROM Settings WHERE Description_DE <> '') GROUP BY Name";
+$result3 = mysqli_query($conn, $sql_q3) or die(mysqli_error($conn));
 
-    $spindle_list = array();
-    while($row_s = mysqli_fetch_assoc($result3) ) {
-        $spindle_list[] = $row_s['Name'];
+$spindle_list = array();
+while($row_s = mysqli_fetch_assoc($result3) ) {
+    $spindle_list[] = $row_s['Name'];
     }
-
-
 ?>
 
 <!DOCTYPE html>
@@ -311,29 +347,27 @@ if (isset($_POST['Go']))
     <link rel="stylesheet" type="text/css" href="./include/iSpindle.css">
 
 <script type="text/javascript">
-    // alert window will be displayed when values are submitted to database
-    function target_popup(form) {
-        window.alert('<?php echo $window_alert_update; ?>');
+// alert window will be displayed when values are submitted to database
+function target_popup(form) {
+    window.alert('<?php echo $window_alert_update; ?>');
     }
 
-    
-    // function to reload page when section is changed -> different section parameters will be displayed and can be changed
-    function reload_page() {
-        var section = document.getElementById('section_name').selectedIndex;
-        var variable_S = '?section='.concat(section);
-        var device = document.getElementById('device_name').selectedIndex;
-        var variable_D = '&device='.concat(device);
-        var url = "http://";
-        var server = window.location.hostname;
-        var path = window.location.pathname;
-        var full_path = url.concat(server).concat(path).concat(variable_S).concat(variable_D);
-        window.open(full_path,"_self");
-
+// function to reload page when section is changed -> different section parameters will be displayed and can be changed
+function reload_page() {
+    var section = document.getElementById('section_name').selectedIndex;
+    var variable_S = '?section='.concat(section);
+    var device = document.getElementById('device_name').selectedIndex;
+    var variable_D = '&device='.concat(device);
+    var url = "http://";
+    var server = window.location.hostname;
+    var path = window.location.pathname;
+    var full_path = url.concat(server).concat(path).concat(variable_S).concat(variable_D);
+    window.open(full_path,"_self");
     }
 </script>
 
 </head>
-<body bgcolor="#E6E6FA">
+<body class='<?php echo $document_class ?>'>
 <form name="main" action="<?php echo htmlentities($_SERVER['PHP_SELF']); ?>" method="post" enctype="multipart/form-data">
 <a href=/iSpindle/index.php><img src=include/icons8-home-26.png alt="<?php echo $stop; ?>"></a>
 <h1><?php echo $settings_header; ?></h1>
@@ -341,7 +375,7 @@ if (isset($_POST['Go']))
 
 <!-- 
     All sections from array are listed in a select box
-    If selection i changed, reload_page function is called to display parameters for selected section    
+    If selection is changed, reload_page function is called to display parameters for selected section    
 -->
 
 <p>Device:
@@ -404,7 +438,7 @@ if (isset($_POST['Go']))
 // if a section is selected (default is 0), table will be defined
 // Database entries for parameter, value and description of defined language will be displayed for selected section
 // name of input field gets unique id (combination of section and parameter). This is used to identify parameter value during _POST['GO']
-if ($_GET['section']<>''){ 
+if ($_GET['section']<> '' and $selected_section <>'LAYOUT'){ 
 
 echo "<table border='0'>";
 echo "<tr>";
@@ -423,6 +457,25 @@ echo "</tr>";
     }}
 echo "</table>";
 }
+if ($_GET['section'] <> '' and $selected_section == 'LAYOUT'){
+    while($row = mysqli_fetch_assoc($result) ) {
+        if ($row['Section'] == $sections[$_GET['section']] and $row['DeviceName'] == $devices[$_GET['device']] ) {
+            $parameter   = $row['Parameter'];
+            $value       = $row['value'];
+            $text = $row[$DESCRIPTION];
+            if ($value <> 1){
+                echo "<input type='radio' id='$parameter' name='colorscheme' value='$parameter'>";
+                echo "<label for='$parameter'>$text</label><br/>";
+            }
+            else {
+                echo "<input type='radio' id='$parameter' name='colorscheme' value='$parameter' checked>";
+                echo "<label for='$parameter'>$text</label><br/>";
+
+            }
+
+        }
+    }
+}
 ?>
 <br />
 <br />
@@ -433,9 +486,18 @@ echo "</table>";
 <input type = "hidden" name="current_Sid" value="<?php echo $_GET['section']; ?>">
 <input type = "hidden" name="current_device" value="<?php echo $devices[$_GET['device']]; ?>">
 <input type = "hidden" name="current_Did" value="<?php echo $_GET['device']; ?>">
-<input type = "submit" name = "Go" value = "<?php echo $send; ?>" onclick="target_popup(this)">
-<input type = "submit" name = "Stop" value = "<?php echo $stop; ?>">
+
 <?php
+// Layout selection has radiobuttons as only one layout can be selected
+if ($selected_section <> "LAYOUT"){
+    echo "<input type = 'submit' name = 'Go' value = '$send' onclick='target_popup(this)'>";
+}
+else{
+    echo "<input type = 'submit' name = 'GoLayout' value = '$send' onclick='target_popup(this)'>";
+}
+
+// if device is global and section is email, option to sen test eimail is shown
+echo "<input type = 'submit' name = 'Stop' value = '$stop'>";
     if ($selected_device == "GLOBAL" && $selected_section == "EMAIL"){
         echo "</br></br>";
         echo "<div id='delete' style='display: block;' >";
@@ -445,6 +507,7 @@ echo "</table>";
 ?>
 <br />
 <br />
+
 <!-- show devices that have currently no individual settings. Individual settings can be added for selected device -->
 <?php
     $max = count ($spindle_list);
@@ -465,6 +528,9 @@ echo "</table>";
     ?>
 </select>
 
+<!-- 
+    section to show import and export functions related to the database and settings table
+-->
 <h2><?php echo $database_header; ?></h2>
 
 <table border='1' cellspacing='0' cellpadding='10'>
@@ -483,7 +549,6 @@ echo "</table>";
 <?php echo $import; ?>
 </br>
 <input type="file" name="fileupload" value="fileupload" id="fileupload">
-<!-- <label for="fileupload"> Select a file to upload</label>-->
 <input type="submit" name="Import_Data" value="Daten Importieren">        
 </td>
 <td>
@@ -495,11 +560,12 @@ echo "</table>";
 <?php echo $import; ?>
 </br>
 <input type="file" name="settingsupload" value="settingsupload" id="settingsupload">
-<!-- <label for="fileupload"> Select a file to upload</label>-->
 <input type="submit" name="Import_Settings" value="Settings Importieren">
 </br>
 </td>
 </tr>
 </table>
 </form>
+</body>
+</html>
 

@@ -1,14 +1,14 @@
 <?php
 ini_set('display_errors', 'On');
 error_reporting(E_ALL | E_STRICT);
-$mainpage=strtoupper("Hauptseite");
 
 // Loads personal config file for db connection details. If not found, default file will be used
-if ((include_once './config/common_db_config.php') == FALSE){
-    include_once("./config/common_db_default.php");
+if ((include_once '../config/common_db_config.php') == FALSE){
+    include_once("../config/common_db_default.php");
     }
 //  Loads db query functions
 include_once("./include/common_db_query.php");
+$document_class = get_color_scheme($conn);
 ?>
 
 
@@ -20,7 +20,6 @@ include_once("./include/common_db_query.php");
     <meta name="Description" content="iSpindle Fermentation Chart Selection Screen">
     <meta http-equiv="Content-Type" content="text/html;charset=utf-8">
     <link rel="stylesheet" type="text/css" href="./include/iSpindle.css">
-
 <style id="php_Parameter_10648_Styles"><!--table
 	{mso-displayed-decimal-separator:"\,";
 	mso-displayed-thousand-separator:"\.";}
@@ -253,10 +252,10 @@ include_once("./include/common_db_query.php");
 --></style>
 
 </head>
-<body>
+<body class='<?php echo $document_class ?>'>
 <form name="main" action="<?php echo htmlentities($_SERVER['PHP_SELF']); ?>" method="post">
 
-<ul class="nav navbar-nav">
+<?php echo"<ul class='nav navbar-nav'>" ?> 
 <h2>RasPySpindel</h2>
   <li><a class="active" href="#home">Hilfe</a></li>
   <li><a href="#main">Hauptseite</a></li>

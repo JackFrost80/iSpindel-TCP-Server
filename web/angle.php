@@ -13,8 +13,8 @@ error_reporting(E_ALL | E_STRICT);
 // DB config values will be pulled from differtent location and user can personalize this file: common_db_config.php
 // If file does not exist, values will be pulled from default file
 
-if ((include_once './config/common_db_config.php') == FALSE){
-       include_once("./config/common_db_default.php");
+if ((include_once '../config/common_db_config.php') == FALSE){
+       include_once("../config/common_db_default.php");
 	}
 include_once("include/common_db_query.php");
 
@@ -40,6 +40,7 @@ $tfhours = $tftemp;
 list($isCalib, $dens, $temperature, $angle) = getChartValues($conn, $_GET['name'], $timeFrame, $_GET['reset']);
 list($RecipeName, $show) = getCurrentRecipeName($conn, $_GET['name'], $timeFrame, $_GET['reset']);
 
+$document_class = get_color_scheme($conn);
 // Get fields from database in language selected in settings
 $file = "angle";
 $recipe_name = get_field_from_sql($conn,'diagram',"recipe_name");
@@ -344,7 +345,7 @@ $(function ()
 });
 </script>
 </head>
-<body>
+<body class='<?php echo $document_class ?>'>
 <form name="main" action="<?php echo htmlentities($_SERVER['PHP_SELF']); ?>" method="post">
  
 <a href=/iSpindle/index.php><img src=include/icons8-home-26.png alt="<?php echo $stop; ?>"></a>
