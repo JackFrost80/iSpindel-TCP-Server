@@ -270,6 +270,10 @@ def handler(clientsock, addr):
     spindle_id = 0
     angle = 0.0
     temperature = 0.0
+    setpoint = 0.0
+    gradient = 0.0
+    cv = 0.0
+    time_to_go = 0
     battery = 0.0
     gravity = 0.0
     user_token = ''
@@ -300,8 +304,12 @@ def handler(clientsock, addr):
                 jinput = json.loads(inpstr)
                 spindle_name = jinput['name']
                 if 'type' in jinput:
-                    dbgprint("detected eManometer")
-                    gauge = 1
+                    if jinput['type'] == "IDS2":
+                        dbgprint("detected IDS2 Data")
+                        gauge = 2
+                    else:
+                        dbgprint("detected eManometer")
+                        gauge = 1
                 else:
                     gauge = 0
                     dbgprint("detected iSpindel")
@@ -324,6 +332,16 @@ def handler(clientsock, addr):
                     except:
                         # older firmwares < 5.4 or field not filled in
                         user_token = '*'
+                elif gauge == 2:
+                    spindle_id = jinput['ID']
+                    setpoint = jinput['setpoint']
+                    temperature = jinput['temperature']
+                    gradient = jinput['gradient']
+                    cv = jinput['cv']
+                    time_to_go = jinput['time_left']
+                    #interval = jinput['interval']
+                    rssi = jinput['RSSI']
+                    
                 else:
                     spindle_id = jinput['ID']
                     pressure = jinput['pressure']
@@ -502,13 +520,18 @@ def handler(clientsock, addr):
         if SQL:
             recipe = 'n/a'
             try:
-                dbgprint(repr(addr) + ' Reading last recipe name for corresponding Spindel' + spindle_name)
+                dbgprint(repr(addr) + ' Reading last recipe name for corresponding Spindel ' + spindle_name)
                 # Get the recipe name from last reset for the spindel that has sent data
                 import mysql.connector
                 cnx = mysql.connector.connect(user=SQL_USER, port=SQL_PORT, password=SQL_PASSWORD, host=SQL_HOST,
                                               database=SQL_DB)
                 cur = cnx.cursor()
-                sqlselect = "SELECT Data.Recipe FROM Data WHERE Data.Name = '" + spindle_name + "' AND Data.Timestamp >= (SELECT max( Data.Timestamp )FROM Data WHERE Data.Name = '" + spindle_name + "' AND Data.ResetFlag = true) LIMIT 1;"
+                if gauge == 0 :
+                    sqlselect = "SELECT Data.Recipe FROM Data WHERE Data.Name = '" + spindle_name + "' AND Data.Timestamp >= (SELECT max( Data.Timestamp )FROM Data WHERE Data.Name = '" + spindle_name + "' AND Data.ResetFlag = true) LIMIT 1;"
+                elif gauge == 2:
+                    sqlselect = "SELECT heizen.Recipe FROM heizen WHERE heizen.Name = '" + spindle_name + "' AND heizen.Timestamp >= (SELECT max( heizen.Timestamp )FROM heizen WHERE heizen.Name = '" + spindle_name + "' AND heizen.ResetFlag = true) LIMIT 1;"
+                else:
+                    sqlselect = "SELECT iGauge.Recipe FROM iGauge WHERE iGauge.Name = '" + spindle_name + "' AND iGauge.Timestamp >= (SELECT max( iGauge.Timestamp )FROM iGauge WHERE iGauge.Name = '" + spindle_name + "' AND iGauge.ResetFlag = true) LIMIT 1;"
                 cur.execute(sqlselect)
                 recipe_names = cur.fetchone()
                 cur.close()
@@ -517,26 +540,27 @@ def handler(clientsock, addr):
                 dbgprint('Recipe Name: Done. ' + recipe)
             except Exception as e:
                 dbgprint(repr(addr) + ' Recipe Name not found - Database Error: ' + str(e))
-
-            recipe_id = 0
-            try:
-                dbgprint(repr(addr) + ' Reading last recipe_id value for corresponding Spindel' + spindle_name)
-                # Get the latest recipe_id for the spindel that has sent data from the archive table
-                import mysql.connector
-                cnx = mysql.connector.connect(user=SQL_USER, port=SQL_PORT, password=SQL_PASSWORD, host=SQL_HOST,
-                                              database=SQL_DB)
-                cur = cnx.cursor()
-                sqlselect = "SELECT max(Archive.Recipe_ID) FROM Archive WHERE Archive.Name='" + spindle_name + "';"
-                cur.execute(sqlselect)
-                recipe_ids = cur.fetchone()
-                cur.close()
-                cnx.close()
-                recipe_id = str(recipe_ids[0])
-                dbgprint('Recipe_ID: Done. ' + recipe_id)
-            except Exception as e:
-                dbgprint(repr(addr) + ' Recipe_ID not found - Database Error: ' + str(e))
-            if recipe_id == "None":
+            if gauge == 0:
                 recipe_id = 0
+                try:
+                    dbgprint(repr(addr) + ' Reading last recipe_id value for corresponding Spindel ' + spindle_name)
+                    # Get the latest recipe_id for the spindel that has sent data from the archive table
+                    import mysql.connector
+                    cnx = mysql.connector.connect(user=SQL_USER, port=SQL_PORT, password=SQL_PASSWORD, host=SQL_HOST,
+                                                database=SQL_DB)
+                    cur = cnx.cursor()
+                
+                    sqlselect = "SELECT max(Archive.Recipe_ID) FROM Archive WHERE Archive.Name='" + spindle_name + "';"
+                    cur.execute(sqlselect)
+                    recipe_ids = cur.fetchone()
+                    cur.close()
+                    cnx.close()
+                    recipe_id = str(recipe_ids[0])
+                    dbgprint('Recipe_ID: Done. ' + recipe_id)
+                except Exception as e:
+                    dbgprint(repr(addr) + ' Recipe_ID not found - Database Error: ' + str(e))
+                if recipe_id == "None":
+                    recipe_id = 0
             try:
                 import mysql.connector
                 dbgprint(repr(addr) + ' - writing to database')
@@ -544,6 +568,9 @@ def handler(clientsock, addr):
                 if gauge == 0 :
                     fieldlist = ['Timestamp', 'Name', 'ID', 'Angle', 'Temperature', 'Battery', 'Gravity', 'Recipe', 'Recipe_ID']
                     valuelist = [datetime.now(), spindle_name, spindle_id, angle, temperature, battery, gravity, recipe, recipe_id]
+                elif gauge == 2:
+                    fieldlist = ['Timestamp', 'Name', 'ID', 'Sollwert', 'Temperature', 'Stellgrad', 'Restzeit', 'Gradient', 'Recipe']
+                    valuelist = [datetime.now(), spindle_name, spindle_id, setpoint, temperature, cv ,time_to_go, gradient , recipe]
                 else:
                     fieldlist = ['Timestamp', 'Name', 'ID', 'Pressure', 'Temperature', 'Carbondioxid', 'Recipe']
                     valuelist = [datetime.now(), spindle_name, spindle_id, pressure, temperature, carbondioxid, recipe]
@@ -600,6 +627,8 @@ def handler(clientsock, addr):
                 valuestr = ', '.join(['%s' for x in valuelist])
                 if gauge == 0 :
                     add_sql = 'INSERT INTO Data (' + fieldstr + ')'
+                if gauge == 2 :
+                    add_sql = 'INSERT INTO heizen (' + fieldstr + ')'
                 else :
                     add_sql = 'INSERT INTO iGauge (' + fieldstr + ')'
                 add_sql += ' VALUES (' + valuestr + ')'

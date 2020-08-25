@@ -255,6 +255,8 @@ $document_class = get_color_scheme($conn);
     $chart_filename_15 = get_field_from_sql($conn,$file,"chart_filename_15");
     $chart_filename_16 = get_field_from_sql($conn,$file,"chart_filename_16");
     $chart_filename_17 = get_field_from_sql($conn,$file,"chart_filename_17");
+    $chart_filename_18 = get_field_from_sql($conn,$file,"chart_filename_18");
+    $chart_filename_19 = get_field_from_sql($conn,$file,"chart_filename_19");
     $show_diagram = get_field_from_sql($conn,$file,"show_diagram");
     $calibrate_spindle = get_field_from_sql($conn,$file,"calibrate_spindle");
     $server_settings = get_field_from_sql($conn,$file,"server_settings");
@@ -372,6 +374,11 @@ write_log('Recipe_ID Column exists: '. $exists);
     $q_sql1 = "SHOW TABLES LIKE 'iGauge'";
     $lines = mysqli_query($conn, $q_sql1) or die(mysqli_error($conn));
     $iGauge_exists = mysqli_num_rows($lines);
+    
+//  check if IDS2 table exists
+    $q_sql1 = "SHOW TABLES LIKE 'heizen'";
+    $lines = mysqli_query($conn, $q_sql1) or die(mysqli_error($conn));
+    $IDS2_exists = mysqli_num_rows($lines);
 
 write_log('iGauge Table exists: '. $iGauge_exists);
 
@@ -401,6 +408,30 @@ write_log('Archive has rows: '. $archive_rows);
     function einblenden(){
         var select = document.getElementById('chart_filename').selectedIndex;
         if(select == 12){
+           document.getElementById('ResetNow').style.display = "block"; // show Name for recipe
+           document.getElementById('send').style.display = "block"; // show send_reset
+           document.getElementById('show').style.display = "none"; // hide diagram button
+           document.getElementById('diagrams').style.display = "none"; // hide reset checkbox and days history for diagrams
+           document.getElementById('archive').style.display = "none"; // hide archive button
+           document.getElementById('end').style.display = "none"; // hide fermentation end button
+           document.getElementById('commentfield').style.display = "none"; // hide comment field
+           document.getElementById('comment').style.display = "none"; // hide comment button
+
+
+        }
+        else if(select == 16){
+           document.getElementById('ResetNow').style.display = "block"; // show Name for recipe
+           document.getElementById('send').style.display = "block"; // show send_reset
+           document.getElementById('show').style.display = "none"; // hide diagram button
+           document.getElementById('diagrams').style.display = "none"; // hide reset checkbox and days history for diagrams
+           document.getElementById('archive').style.display = "none"; // hide archive button
+           document.getElementById('end').style.display = "none"; // hide fermentation end button
+           document.getElementById('commentfield').style.display = "none"; // hide comment field
+           document.getElementById('comment').style.display = "none"; // hide comment button
+
+
+        }
+        else if(select == 18){
            document.getElementById('ResetNow').style.display = "block"; // show Name for recipe
            document.getElementById('send').style.display = "block"; // show send_reset
            document.getElementById('show').style.display = "none"; // hide diagram button
@@ -471,6 +502,7 @@ echo "<body class='$document_class'>";
 $action=htmlentities($_SERVER['PHP_SELF']);
 echo "<form name='main' action='$action' method='post'>";
 echo "<h1>RasPySpindel</h1>";
+
 echo "<h3>$diagram_selection  $daysago</h3>";
 
 //select options for devices to be generated (devices that have send data within the timeframe $daysago)
@@ -479,17 +511,29 @@ echo "<h3>$diagram_selection  $daysago</h3>";
         while($row = mysqli_fetch_assoc($result))
             {
                 $iSpindle_Name=$row['Name'];
+                
                 echo "<option value = '$iSpindle_Name'>$iSpindle_Name";
             }
         echo "</option>";
     if ($iGauge_exists != 0) {
         $sql_q = "SELECT DISTINCT Name FROM iGauge
-        WHERE Timestamp > date_sub(NOW(), INTERVAL ".$daysago." DAY)
+        WHERE Timestamp > date_sub(NOW(), INTERVAL 365 DAY)
         ORDER BY Name";
         $result=mysqli_query($conn, $sql_q) or die(mysqli_error($conn));
         while($row = mysqli_fetch_assoc($result)){
             $iGauge_name=$row['Name'];
-            echo"<option value = '$iGauge_Name'>$iGauge_Name";
+            echo"<option value = '$iGauge_name'>$iGauge_name";
+        }
+    }
+    echo"</option>";
+    if ($IDS2_exists != 0) {
+        $sql_q = "SELECT DISTINCT Name FROM heizen
+        WHERE Timestamp > date_sub(NOW(), INTERVAL 365 DAY)
+        ORDER BY Name";
+        $result=mysqli_query($conn, $sql_q) or die(mysqli_error($conn));
+        while($row = mysqli_fetch_assoc($result)){
+            $IDS2_name=$row['Name'];
+            echo"<option value = '$IDS2_name'>$IDS2_name";
         }
     }
     echo"</option>";
@@ -517,6 +561,10 @@ echo "<option value='add_comment.php'>$chart_filename_15</option>";
 if ($iGauge_exists != 0) {
     echo "<option value='iGauge.php'>$chart_filename_16</option>";
     echo "<option value='reset_now_igauge.php'>$chart_filename_17</option>";
+}
+if ($IDS2_exists != 0) {
+    echo "<option value='IDS2.php'>$chart_filename_18</option>";
+    echo "<option value='reset_now_IDS2.php'>$chart_filename_19</option>";
 }
 ?>
 </select>
@@ -654,11 +702,68 @@ if ($len !=0 ){
         echo "<td>" . number_format($RSSI,0) . "</td>";
         echo "</tr>";
         
+        
         }
     }
 echo "</tbody>";
 echo "</table>";
 }
+if($iGauge_exists != 0)
+{
+	
+	$sql_q = "SELECT Name FROM iGauge
+        WHERE Timestamp > date_sub(NOW(), INTERVAL ".$daysago." DAY)
+        Group by Name ORDER BY Name";
+    	$result=mysqli_query($conn, $sql_q) or die(mysqli_error($conn));
+    	if(mysqli_num_rows($result) > 0)
+    	{
+    		echo "<br><br><br>";
+    		echo "<table class='$document_class'>";
+    		echo "<thead>";
+    		echo "<tr>";
+    		echo "<th><b>Device</b></th>";
+    		echo "<th><b>$header_time</b></th>";
+    		echo "<th><b>$header_recipe</b></th>";
+    		echo "<th><b>$header_pressure [bar]]</b></th>";
+		    echo "<th><b>$header_temperature [°C]</b></th>";
+    		echo "<th><b>$header_carbondioxide</b></th>";
+    		//echo "<th><b>$header_density</b></th>";
+    		//echo "<td><b>$header_deltagravity ($hours_ago h)</b></td>";
+    		//echo "<td><b>$header_svg</b></td>";
+    		//echo "<td><b>$header_alcohol</b></td>";
+    		//echo "<td><b>$header_battery [Volt]</b></td>";
+    		//echo "<td><b>$header_wifi [dB]</b></td>";
+    		echo "</tr>\n";
+    		echo "</thead>";
+    		echo "<tbody>";
+    		while ($row = $result->fetch_assoc()) {
+        	$sql_q="Select UNIX_TIMESTAMP(Timestamp) as Datum,Pressure,Temperature,Carbondioxid FROM iGauge WHERE NAME LIKE '" . $row['Name'] . "' Order BY Timestamp DESC Limit 1";
+        	$result_data=mysqli_query($conn, $sql_q) or die(mysqli_error($conn));
+        	while ($row_data = $result_data->fetch_assoc()) 
+			{
+        		echo "<tr>";
+        		echo "<td><b>" . $row['Name'] . "</b></td>";
+       			echo "<td>" . date("Y-m-d\ H:i:s\ ", $row_data['Datum']) . "</td>";
+       			echo "<td><b>Test</b></td>";
+       			echo "<td>" . number_format($row_data['Pressure'],2) . "</td>";
+       			echo "<td>" . number_format($row_data['Temperature'],1) . "</td>";
+       			echo "<td>" . number_format($row_data['Carbondioxid'],2) . "</td>";
+        		echo "</tr>\n";
+				
+       		}
+        	
+        
+        	}
+        	echo "</tbody>";
+        	echo "</table>";
+        	
+    		
+    		
+    		
+    }
+}
+
+
 ?>
 <br/>
 <br/>
