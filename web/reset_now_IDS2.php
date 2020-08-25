@@ -30,7 +30,7 @@ $recipe_written = get_field_from_sql($conn,$file,"recipe_written");
 
 //depending on mysql config e.g. strict mode, all values need to be transfered to DB and no empty values are allowed.
 //unique spindle id is pulled from DB and transferred for reset timestamp
-$q_sql0 = mysqli_query($conn, "SELECT DISTINCT ID FROM iGauge WHERE Name = '".$Name."'AND (ID <>'' OR ID <>'0') ORDER BY Timestamp DESC LIMIT 1") or die(mysqli_error($conn));  
+$q_sql0 = mysqli_query($conn, "SELECT DISTINCT ID FROM heizen WHERE Name = '".$Name."'AND (ID <>'' OR ID <>'0') ORDER BY Timestamp DESC LIMIT 1") or die(mysqli_error($conn));  
 
 
 if (! $q_sql0){ 
@@ -47,7 +47,7 @@ $valID='0';
 
 
 // set reset flag for spindel and write recipe name , '0' values for other parameters as 'NULL' values may cause a problem for some database configurations (strict SQL mode)
-$sql_select="UPDATE iGauge SET resetFlag=1 WHERE Index_ = (SELECT MAX(Index_) FROM iGauge WHERE Name = '".$Name."')";
+$sql_select="UPDATE heizen SET resetFlag=1 ,  recipe = '". $Recipe . "' WHERE Index_ = (SELECT MAX(Index_) FROM heizen WHERE Name = '".$Name."')";
     mysqli_set_charset($conn, "utf8mb4");
 
  $q_sql = mysqli_query($conn, $sql_select)
