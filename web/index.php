@@ -1,56 +1,101 @@
 <?php
-
-ini_set('display_errors', 'On');
-error_reporting(E_ALL | E_STRICT);
+// show errors in case of issues with php
+// ini_set('display_errors', 'On');
+// error_reporting(E_ALL | E_STRICT);
     
-    // Landing page (Homepage) for RasPySpindel Project
-    // Selecting chart, iSpindel name, timeframe and other parameters here
-    // For now, this is in German. Help porting it to other languages appreciated.
-    //
-    // Future enhancements could/should include:
-    // - remote configuration
-    // - calibration
-    // - data management (delete old stuff)
-    // - configure timezone, units (F/C, SG/%ww)
-    // - localization of charts (and this page) generally
-    // - make the whole thing look prettier
-    //
-    // GET parameter:
-    // days = number of days in the past we should look for active iSpindels for
-    // default 7 days is configured in include/common_db.php
-    //
-	// December 2018:
-	// Database config parameters will be pulled from different directory. User can use personalized config file: common_db_config.php in config directory
-	// If personalized file does not exist, default config will be loaded: common_db_default.php
-	// Added function to display input field for Sudname on this page only if reset_now.php is selected
-	// If Sudname is entered, it is transferred to the database
-	// Added chart to display battery and Wifi strength trend
-    //
-    // January 2019
-    // Added chart for apparent attenuation and delta trend for plato4
-    // Added support for different languages. Fields stored in strings table in databse
-    //
-    // April 2019
-    // Added support for Umlauts or other characters in recipe name.  
-    // --> requires change for recipe culomn in 'data' table of database -> encoding: utf8mb4
-    // Added several buttons to the page and removed spindle calibrarion from the select fields
-    // Added more java functionality to display only the fileds required for the corresponding selection 
-    // Changed back the select for spindesl to be displayed: Only spindles that have sent data the past x days ago will be shown on this page.
-    // Calibration calls a separate script where the user has to select the spindel that should be calibrated. All spindles are shown there
+// Landing page (Homepage) for RasPySpindel Project
+// Selecting chart, iSpindel name, timeframe and other parameters here
+// For now, this is in German. Help porting it to other languages appreciated.
+//
+// Future enhancements could/should include:
+// - remote configuration
+// - calibration
+// - data management (delete old stuff)
+// - configure timezone, units (F/C, SG/%ww)
+// - localization of charts (and this page) generally
+// - make the whole thing look prettier
+//
+// GET parameter:
+// days = number of days in the past we should look for active iSpindels for
+// default 7 days is configured in include/common_db.php
+//
+// December 2018:
+// Database config parameters will be pulled from different directory. User can use personalized config file: common_db_config.php in config directory
+// If personalized file does not exist, default config will be loaded: common_db_default.php
+// Added function to display input field for Sudname on this page only if reset_now.php is selected
+// If Sudname is entered, it is transferred to the database
+// Added chart to display battery and Wifi strength trend
+//
+// January 2019
+// Added chart for apparent attenuation and delta trend for plato4
+// Added support for different languages. Fields stored in strings table in databse
+//
+// April 2019
+// Added support for Umlauts or other characters in recipe name.  
+// --> requires change for recipe culomn in 'data' table of database -> encoding: utf8mb4
+// Added several buttons to the page and removed spindle calibrarion from the select fields
+// Added more java functionality to display only the fileds required for the corresponding selection 
+// Changed back the select for spindesl to be displayed: Only spindles that have sent data the past x days ago will be shown on this page.
+// Calibration calls a separate script where the user has to select the spindel that should be calibrated. All spindles are shown there
+//
+// May 2020
+// Added css file to allow for different layouts of web pages
+// Added summary table to index page for spindles that have send data in the past $daysago timeframe
+// Added several diagrams (attenuation,...)
+// Added iGauge fucntionality if tables exist in database
+// Added functionality to upgrade strings and settings tabel via index page
+// Added functionality to migrate database to allow for archive functions from index page
+// Added help page (currently only in german)
+// Added footer to display PID of python server script
+
     
 // Loads personal config file for db connection details. If not found, default file will be used
-if ((include_once './config/common_db_config.php') == FALSE){
-       include_once("./config/common_db_default.php");
+if ((include_once '../config/common_db_config.php') == FALSE){
+       include_once("../config/common_db_default.php");
     }
+if (!$conn){
+
+    // establish path by the current URL used to invoke this page
+    $url="http://";
+    $url .= $_SERVER['HTTP_HOST'].dirname($_SERVER['PHP_SELF'])."/";
+    $url .= 'setup.php';
+    // open the page
+    header("Location: ".$url);
+}
+
+// Update calibration and archive table to allow for 3rd degree polynom if required
+// check first, if archive table exists
+    $q_sql="SHOW TABLES LIKE '%Archive%'";
+    $lines = mysqli_query($conn, $q_sql) or die(mysqli_error($conn));
+    $archive_exists = mysqli_num_rows($lines);
+    if ($archive_exists !=0){
+        //  check if calibration table has column const0
+        $q_sql1 = "SHOW COLUMNS FROM Calibration WHERE FIELD LIKE 'const0'";
+        $lines = mysqli_query($conn, $q_sql1) or die(mysqli_error($conn));
+        $const0_exists = mysqli_num_rows($lines);
+        if ($const0_exists ==0){
+            $add_column_sql1="ALTER TABLE `Calibration` ADD `const0` DOUBLE NOT NULL AFTER `ID`";
+            mysqli_query($conn, $add_column_sql1) or die(mysqli_error($conn));
+            }
+
+        $q_sql1 = "SHOW COLUMNS FROM Archive WHERE FIELD LIKE 'const0'";
+        $lines = mysqli_query($conn, $q_sql1) or die(mysqli_error($conn));
+        $const0_exists = mysqli_num_rows($lines);
+        if ($const0_exists == 0){
+            $add_column_sql1="ALTER TABLE `Archive` ADD `const0` DOUBLE NOT NULL AFTER `End_date`";
+            mysqli_query($conn, $add_column_sql1) or die(mysqli_error($conn));
+            }
+        }
+
+
 //  Loads db query functions
 include_once("./include/common_db_query.php");
-include_once("./config/tables.php");
+include_once("../config/tables.php");
  
 
-    // Self-called by submit button?
+    // Self-called by submit button to load diagrams
     if (isset($_POST['Go']))
     {
-
         // construct url
         // establish path by the current URL used to invoke this page
         $url="http://";
@@ -122,7 +167,7 @@ include_once("./config/tables.php");
     }
 
 // Self-called by archive button
-// calls php script to load archive data in TCP-Server
+// calls php script to load archive script 
 
     if (isset($_POST['archive']))
     {
@@ -139,7 +184,7 @@ include_once("./config/tables.php");
 
 
 // Self-called by update_strings button
-// updates strings table with latest version and calls index page
+// updates strings table with latest version and re-loads index page
 
     if (isset($_POST['Up_Str']))
     {
@@ -155,7 +200,7 @@ include_once("./config/tables.php");
     }
 
 // Self-called by update_settings button
-// updates settings table with latest version and calls index page
+// updates settings table with latest version and re-loads index page
 
     if (isset($_POST['Up_Set']))
     {
@@ -170,6 +215,10 @@ include_once("./config/tables.php");
         exit;
     }
 
+// Self-called by upgrade_data table button
+// migrates data table and adds recipe_id and comment column
+// creates archive table based on existing data
+
     if (isset($_POST['Up_DataTab']))
     {
       upgrade_data_table($conn);
@@ -183,7 +232,8 @@ include_once("./config/tables.php");
         exit;
     }
 
-    
+//  get selected color scheme for layout
+$document_class = get_color_scheme($conn);    
 
 // sql queries to get language dependent fields to be displayed
     $file = "index";
@@ -203,6 +253,10 @@ include_once("./config/tables.php");
     $chart_filename_13 = get_field_from_sql($conn,$file,"chart_filename_13");
     $chart_filename_14 = get_field_from_sql($conn,$file,"chart_filename_14");
     $chart_filename_15 = get_field_from_sql($conn,$file,"chart_filename_15");
+    $chart_filename_16 = get_field_from_sql($conn,$file,"chart_filename_16");
+    $chart_filename_17 = get_field_from_sql($conn,$file,"chart_filename_17");
+    $chart_filename_18 = get_field_from_sql($conn,$file,"chart_filename_18");
+    $chart_filename_19 = get_field_from_sql($conn,$file,"chart_filename_19");
     $show_diagram = get_field_from_sql($conn,$file,"show_diagram");
     $calibrate_spindle = get_field_from_sql($conn,$file,"calibrate_spindle");
     $server_settings = get_field_from_sql($conn,$file,"server_settings");
@@ -233,7 +287,7 @@ include_once("./config/tables.php");
     $comment_text = get_field_from_sql($conn,$file,"comment_text");
     $header_deltagravity = get_field_from_sql($conn,$file,"header_deltagravity");
 
-
+// time in hours for the calculation of the delta plato shown on the overview table
     $hours_ago = 12;
 
     $header_recipe = get_field_from_sql($conn,'diagram',"recipe_name");
@@ -242,8 +296,6 @@ include_once("./config/tables.php");
     $header_battery = get_field_from_sql($conn,$file,"header_battery");
     $header_temperature = get_field_from_sql($conn,$file,"header_temperature");
     $header_angle = get_field_from_sql($conn,$file,"header_angle");
-    $header_pressure = get_field_from_sql($conn,$file,"header_pressure");
-	$header_carbondioxide = get_field_from_sql($conn,$file,"header_carbondioxid");
 
     $file = "wifi";
     $header_wifi = get_field_from_sql($conn,$file,"header");
@@ -257,18 +309,26 @@ include_once("./config/tables.php");
     $header_alcohol = get_field_from_sql($conn,$file,"third_y");
 
 
-    // "Days Ago parameter set?
+// "Days Ago parameter set?
     if(!isset($_GET['days'])) $_GET['days'] = 0; else $_GET['days'] = $_GET['days'];
     $daysago = $_GET['days'];
     if($daysago == 0) $daysago = defaultDaysAgo;
 
-// get information if TCP server is running
+// get information if TCP server is running (if pid file is written)
     $pids=''; 
     $running=false;
     $stat = exec("systemctl is-active ispindle-srv");
     if (file_exists( "/var/run/ispindle-srv.pid" )) {
         $pid= (shell_exec("cat /var/run/ispindle-srv.pid"));
         $running = posix_getpgid(intval($pid));
+    }
+// get information if TCP server is running (if no pid file is written)
+    else {
+         $running=true;
+         $pid= (shell_exec(" ps axf | grep iSpindle.py | grep -v grep| awk '{print $1}'"));
+         if($pid == '') {
+             $running = false;
+         }
     }
     if ($running) {
         $iSpindleServerRunning = $server_running . $pid;
@@ -308,6 +368,28 @@ include_once("./config/tables.php");
     $lines = mysqli_query($conn, $q_sql1) or die(mysqli_error($conn));
     $exists = mysqli_num_rows($lines);
 
+write_log('Recipe_ID Column exists: '. $exists);
+
+//  check if iGauge table exists
+    $q_sql1 = "SHOW TABLES LIKE 'iGauge'";
+    $lines = mysqli_query($conn, $q_sql1) or die(mysqli_error($conn));
+    $iGauge_exists = mysqli_num_rows($lines);
+    
+//  check if IDS2 table exists
+    $q_sql1 = "SHOW TABLES LIKE 'heizen'";
+    $lines = mysqli_query($conn, $q_sql1) or die(mysqli_error($conn));
+    $IDS2_exists = mysqli_num_rows($lines);
+
+write_log('iGauge Table exists: '. $iGauge_exists);
+
+//  check if archive table has entries
+    $q_sql1 ="SELECT COUNT(*) FROM `Archive`";
+    $lines = mysqli_query($conn, $q_sql1) or die(mysqli_error($conn));
+    $result2 = mysqli_fetch_array($lines);
+    $archive_rows = $result2[0];
+
+write_log('Archive has rows: '. $archive_rows);
+
 
 ?>
 
@@ -321,60 +403,86 @@ include_once("./config/tables.php");
     <link rel="stylesheet" type="text/css" href="./include/iSpindle.css">
 </head>
 <script type="text/javascript">
-// Function to hide or display elements. Used for recipe name. Only displayed if reset_now is selected in options
+
+// Function to hide or display elements. Used e.g. for recipe name, comment field,..  
     function einblenden(){
         var select = document.getElementById('chart_filename').selectedIndex;
         if(select == 12){
-           document.getElementById('ResetNow').style.display = "block"; // Name for recipe
-           document.getElementById('send').style.display = "block"; //send_reset
-           document.getElementById('show').style.display = "none"; // show diagram button
-           document.getElementById('diagrams').style.display = "none";
-           document.getElementById('archive').style.display = "none";
-           document.getElementById('end').style.display = "none";
-           document.getElementById('commentfield').style.display = "none";
-           document.getElementById('comment').style.display = "none";
+           document.getElementById('ResetNow').style.display = "block"; // show Name for recipe
+           document.getElementById('send').style.display = "block"; // show send_reset
+           document.getElementById('show').style.display = "none"; // hide diagram button
+           document.getElementById('diagrams').style.display = "none"; // hide reset checkbox and days history for diagrams
+           document.getElementById('archive').style.display = "none"; // hide archive button
+           document.getElementById('end').style.display = "none"; // hide fermentation end button
+           document.getElementById('commentfield').style.display = "none"; // hide comment field
+           document.getElementById('comment').style.display = "none"; // hide comment button
+
+
+        }
+        else if(select == 16){
+           document.getElementById('ResetNow').style.display = "block"; // show Name for recipe
+           document.getElementById('send').style.display = "block"; // show send_reset
+           document.getElementById('show').style.display = "none"; // hide diagram button
+           document.getElementById('diagrams').style.display = "none"; // hide reset checkbox and days history for diagrams
+           document.getElementById('archive').style.display = "none"; // hide archive button
+           document.getElementById('end').style.display = "none"; // hide fermentation end button
+           document.getElementById('commentfield').style.display = "none"; // hide comment field
+           document.getElementById('comment').style.display = "none"; // hide comment button
+
+
+        }
+        else if(select == 18){
+           document.getElementById('ResetNow').style.display = "block"; // show Name for recipe
+           document.getElementById('send').style.display = "block"; // show send_reset
+           document.getElementById('show').style.display = "none"; // hide diagram button
+           document.getElementById('diagrams').style.display = "none"; // hide reset checkbox and days history for diagrams
+           document.getElementById('archive').style.display = "none"; // hide archive button
+           document.getElementById('end').style.display = "none"; // hide fermentation end button
+           document.getElementById('commentfield').style.display = "none"; // hide comment field
+           document.getElementById('comment').style.display = "none"; // hide comment button
 
 
         }
         else if(select == 13){
-           document.getElementById('ResetNow').style.display = "none"; // Name for recipe
-           document.getElementById('send').style.display = "none"; //send_reset
-           document.getElementById('show').style.display = "none"; // show diagram button
-           document.getElementById('diagrams').style.display = "none";
-           document.getElementById('archive').style.display = "none";
-           document.getElementById('end').style.display = "block";
-           document.getElementById('commentfield').style.display = "none";
-           document.getElementById('comment').style.display = "none";
+           document.getElementById('ResetNow').style.display = "none"; // hide Name for recipe
+           document.getElementById('send').style.display = "none"; //hide send_reset
+           document.getElementById('show').style.display = "none"; // hide diagram button
+           document.getElementById('diagrams').style.display = "none"; // hide reset checkbox and days history for diagrams
+           document.getElementById('archive').style.display = "none"; // hide archive button
+           document.getElementById('end').style.display = "block"; // show fermentation end button
+           document.getElementById('commentfield').style.display = "none"; // hide comment field
+           document.getElementById('comment').style.display = "none"; // hide comment button
 
 
         }
         else if(select == 14){
-           document.getElementById('ResetNow').style.display = "none"; // Name for recipe
-           document.getElementById('send').style.display = "none"; //send_reset
-           document.getElementById('show').style.display = "none"; // show diagram button
-           document.getElementById('diagrams').style.display = "none";
-           document.getElementById('archive').style.display = "none";
-           document.getElementById('end').style.display = "none";
-           document.getElementById('commentfield').style.display = "block";
-           document.getElementById('comment').style.display = "block";
+           document.getElementById('ResetNow').style.display = "none"; // hide Name for recipe
+           document.getElementById('send').style.display = "none"; // hide send_reset
+           document.getElementById('show').style.display = "none"; // hide diagram button
+           document.getElementById('diagrams').style.display = "none"; // hide reset checkbox and days history for diagrams
+           document.getElementById('archive').style.display = "none"; // hide archive button
+           document.getElementById('end').style.display = "none"; // hide fermentation end button
+           document.getElementById('commentfield').style.display = "block"; // show comment field
+           document.getElementById('comment').style.display = "block"; // show comment button
 
 
         }
 
 
         else {
-            document.getElementById('ResetNow').style.display = "none";        
-            document.getElementById('send').style.display = "none";
-            document.getElementById('show').style.display = "block";
-            document.getElementById('diagrams').style.display = "block";
-            document.getElementById('archive').style.display = "block";
-            document.getElementById('end').style.display = "none";
-            document.getElementById('commentfield').style.display = "none";
-            document.getElementById('comment').style.display = "none";
+            document.getElementById('ResetNow').style.display = "none";// hide Name for recipe 
+            document.getElementById('send').style.display = "none"; // hide send_reset
+            document.getElementById('show').style.display = "block"; // show diagram button
+            document.getElementById('diagrams').style.display = "block"; // show reset checkbox and days history for diagrams
+            document.getElementById('archive').style.display = "block";// show archive button
+            document.getElementById('end').style.display = "none"; // hide fermentation end button
+            document.getElementById('commentfield').style.display = "none"; // hide comment field
+            document.getElementById('comment').style.display = "none"; // hide comment button
 
         }
     }
 
+// show buttons for expert settings if checkbox is checked
     function activate_expert(){
         var checkBox = document.getElementById("expert");
         var settings = document.getElementById("expert_settings");
@@ -387,81 +495,78 @@ include_once("./config/tables.php");
         }    
 
 </script>
-<style>
-table {
-  border-collapse: collapse;
-}
 
-table, th, td {
-  border: 1px solid black;
-}
-tr:hover {background-color: #f5f5f5;}
-th {
-  background-color: #0099ff;
-  color: white;
-}
-</style>
-<body>
-<form name="main" action="<?php echo htmlentities($_SERVER['PHP_SELF']); ?>" method="post">
-<h1>RasPySpindel</h1>
-<h3><?php echo($diagram_selection .' '. $daysago)?></h3>
 
-<!-- select options for spindle names -->
 <?php
+echo "<body class='$document_class'>";
+$action=htmlentities($_SERVER['PHP_SELF']);
+echo "<form name='main' action='$action' method='post'>";
+echo "<h1>RasPySpindel</h1>";
+
+echo "<h3>$diagram_selection  $daysago</h3>";
+
+//select options for devices to be generated (devices that have send data within the timeframe $daysago)
     if ($len != 0){
-?>
-<select id="ispindel_name" name = 'ispindel_name'>
-        <?php
-            while($row = mysqli_fetch_assoc($result) )
+        echo "<select id='ispindel_name' name = 'ispindel_name'>";
+        while($row = mysqli_fetch_assoc($result))
             {
-                ?>
-                <option value = "<?php echo($row['Name'])?>">
-                <?php echo($row['Name']) ?>
-        <?php
+                $iSpindle_Name=$row['Name'];
+                
+                echo "<option value = '$iSpindle_Name'>$iSpindle_Name";
             }
-        ?>
-        </option>
-        <?php
+        echo "</option>";
+    if ($iGauge_exists != 0) {
         $sql_q = "SELECT DISTINCT Name FROM iGauge
-        WHERE Timestamp > date_sub(NOW(), INTERVAL ".$daysago." DAY)
+        WHERE Timestamp > date_sub(NOW(), INTERVAL 365 DAY)
         ORDER BY Name";
-    	$result=mysqli_query($conn, $sql_q) or die(mysqli_error($conn));
-            while($row = mysqli_fetch_assoc($result) )
-            {
-                ?>
-                <option value = "<?php echo($row['Name'])?>">
-                <?php echo($row['Name']) ?>
-        <?php
-            }
-            $sql_q = "SELECT DISTINCT Name FROM iGauge
-        WHERE Timestamp > date_sub(NOW(), INTERVAL ".$daysago." DAY)
+        $result=mysqli_query($conn, $sql_q) or die(mysqli_error($conn));
+        while($row = mysqli_fetch_assoc($result)){
+            $iGauge_name=$row['Name'];
+            echo"<option value = '$iGauge_name'>$iGauge_name";
+        }
+    }
+    echo"</option>";
+    if ($IDS2_exists != 0) {
+        $sql_q = "SELECT DISTINCT Name FROM heizen
+        WHERE Timestamp > date_sub(NOW(), INTERVAL 365 DAY)
         ORDER BY Name";
-    	$result=mysqli_query($conn, $sql_q) or die(mysqli_error($conn));
-        ?>
-        </option>
-</select>
+        $result=mysqli_query($conn, $sql_q) or die(mysqli_error($conn));
+        while($row = mysqli_fetch_assoc($result)){
+            $IDS2_name=$row['Name'];
+            echo"<option value = '$IDS2_name'>$IDS2_name";
+        }
+    }
+    echo"</option>";
+    echo"</select>";
 
-<!-- select options for diagrams to be loaded -->
-<select id="chart_filename" name='chart_filename' onchange="einblenden()">;
-        <option value="status.php" selected><?php echo $chart_filename_01 ?></option>
-        <option value="battery.php"><?php echo $chart_filename_02 ?></option>
-        <option value="wifi.php"><?php echo $chart_filename_03 ?></option>
-        <option value="plato4.php"><?php echo $chart_filename_04 ?></option>
-        <option value="plato4_ma.php"><?php echo $chart_filename_05 ?></option>
-        <option value="angle.php"><?php echo $chart_filename_06 ?></option>
-        <option value="angle_ma.php"><?php echo $chart_filename_07 ?></option>
-        <option value="plato.php"><?php echo $chart_filename_08 ?></option>
-        <option value="plato_ma.php"><?php echo $chart_filename_08_1 ?></option>
-        <option value="batterytrend.php"><?php echo $chart_filename_12 ?></option>>
-        <option value="svg_ma.php"><?php echo $chart_filename_10 ?></option>
-        <option value="plato4_delta.php"><?php echo $chart_filename_11 ?></option>	
-        <option value="plato6.php">Easy delta</option>
-        <option value="reset_now.php"><?php echo $chart_filename_09 ?></option>
-        <option value="ferment_end.php"><?php echo $chart_filename_14 ?></option>
-        <option value="add_comment.php"><?php echo $chart_filename_15 ?></option>
-        <option value="iGauge.php">iGauge Daten</option>
-        <option value="reset_now_igauge.php">Nachg�rbeginn Zeitpunkt setzen</option>
-
+//select options for diagrams to be loaded (be aware to adopt JS functions to hide/show elements if order will be changed in future updates/modifications )
+echo "<select id='chart_filename' name='chart_filename' onchange='einblenden()'>";
+echo "<option value='status.php' selected>$chart_filename_01</option>";
+echo "<option value='battery.php'>$chart_filename_02</option>";
+echo "<option value='wifi.php'>$chart_filename_03</option>";
+echo "<option value='plato4.php'>$chart_filename_04</option>";
+echo "<option value='plato4_ma.php'>$chart_filename_05</option>";
+echo "<option value='angle.php'>$chart_filename_06</option>";
+echo "<option value='angle_ma.php'>$chart_filename_07</option>";
+echo "<option value='plato.php'>$chart_filename_08</option>";
+echo "<option value='plato_ma.php'>$chart_filename_08_1</option>";
+echo "<option value='batterytrend.php'>$chart_filename_12</option>";
+echo "<option value='svg_ma.php'>$chart_filename_10</option>";
+echo "<option value='plato4_delta.php'>$chart_filename_11</option>";
+//echo "<option value='plato6.php'>Easy delta</option>"; currently not working
+echo "<option value='reset_now.php'>$chart_filename_09</option>";
+echo "<option value='ferment_end.php'>$chart_filename_14</option>";
+echo "<option value='add_comment.php'>$chart_filename_15</option>";
+// add further select options, if iGauge tables exist in database
+if ($iGauge_exists != 0) {
+    echo "<option value='iGauge.php'>$chart_filename_16</option>";
+    echo "<option value='reset_now_igauge.php'>$chart_filename_17</option>";
+}
+if ($IDS2_exists != 0) {
+    echo "<option value='IDS2.php'>$chart_filename_18</option>";
+    echo "<option value='reset_now_IDS2.php'>$chart_filename_19</option>";
+}
+?>
 </select>
 
 <br />
@@ -470,6 +575,7 @@ th {
 <!-- "hidden" checkbox to make sure we have a response here and not just send "null" -->
 <input type = "hidden" name="fromreset" value="0">
 
+<!-- reset checkbox and daysago field -->
 <div id="diagrams" style="display: block;">
 <input type = "checkbox" name="fromreset" value="1">
 <?php echo($reset_flag)?>
@@ -482,17 +588,19 @@ th {
 <br />
 </div>
 
+<!-- Recipe name field for Reset function (enabled or disabled via JS functions) -->
 <div id="ResetNow" style="display: none;">
 <p><?php echo($recipe_name)?>
 <input type = "text" name = "recipename" /> </p>
 </div>
 
+<!-- Comment text field for comment function (enabled or disabled via JS functions) -->
 <div id="commentfield" style="display: none;">
 <p><?php echo($comment_text)?>
 <input type = "text" name = "comment_text" /> </p>
 </div>
 
-
+<!-- Buttons fr the differnet functions (enabled or disabled via JS functions) -->
 <div id="show" style="display: block;">
 <span title="<?php echo($show_diagram)?>"><input type = "submit" id='diagram' name = "Go" value = "<?php echo($show_diagram)?>"></span>
 </div>
@@ -510,6 +618,7 @@ th {
 <?php
 # endif len !=0
 }
+// if no data has been send witihn $daysago this is shown and option to change $daysago is availabe
 else {
     echo sprintf($no_data, $daysago);
     echo "<br/>";
@@ -522,41 +631,45 @@ else {
     echo "</div>";
 
 }
-?>
-<br/>
-<div id="archive" style="display: block;">
-<span title="<?php echo($show_archive)?>"><input type = "submit" id='archive' name = "archive" value = "<?php echo($show_archive)?>"></span>
-</div>
-<br/>
-<br/>
-<?php
 
-// if a section is selected (default is 0), table will be defined
-// Database entries for parameter, value and description of defined language will be displayed for selected section
-// name of input field gets unique id (combination of section and parameter). This is used to identify parameter value during _POST['GO']
+echo "<br/>";
+// Archive button 
+if ($archive_rows !=0 ){
+echo "<div id='archive' style='display: block;'>";
+echo "<span title='$show_archive'><input type = 'submit' id='archive' name = 'archive' value = '$show_archive'></span>";
+echo "</div>";
+}
+echo "<br/>";
+echo "<br/>";
+
+// if data is available, table with latrest dataset is shown in a table
 if ($len !=0 ){
-echo "<h2>$current_data</h2>"; 
-
-
-    echo "<table border='1'>";
+    echo "<h2>$current_data</h2>"; 
+    echo "<table class='$document_class'>";
+    echo "<thead>";
     echo "<tr>";
-    echo "<th><b>Device</b></th>";
-    echo "<th><b>$header_time</b></th>";
-    echo "<th><b>$header_recipe</b></th>";
-    echo "<th><b>$header_angle [°]</b></th>";
-    echo "<th><b>$header_temperature [°C]</b></th>";
-    echo "<th><b>$header_initialgravity</b></th>";
-    echo "<th><b>$header_density</b></th>";
-    echo "<th><b>$header_deltagravity ($hours_ago h)</b></th>";
-    echo "<th><b>$header_svg</b></th>";
-    echo "<th><b>$header_alcohol</b></th>";
-    echo "<th><b>$header_battery [Volt]</b></th>";
-    echo "<th><b>$header_wifi [dB]</b></th>";
+    echo "<th>Device</th>";
+    echo "<th>$header_time</th>";
+    echo "<th>$header_recipe</th>";
+    echo "<th>$header_angle [°]</th>";
+    echo "<th>$header_temperature [°C]</th>";
+    echo "<th>$header_initialgravity</th>";
+    echo "<th>$header_density</th>";
+    echo "<th>$header_deltagravity ($hours_ago h)</th>";
+    echo "<th>$header_svg</th>";
+    echo "<th>$header_alcohol</th>";
+    echo "<th>$header_battery [Volt]</th>";
+    echo "<th>$header_wifi [dB]</th>";
     echo "</tr>";
+    echo "</thead>";
+    echo "<tbody>";
     while($row = mysqli_fetch_assoc($result1) ) {
+        // data is shown only for devices where SHOWSUMMARY is set to 1 in settings 
         $show_device=get_settings_from_sql($conn, 'GENERAL', $row['Name'],'SHOWSUMMARY'); 
         if ($show_device == 1){
+//get current data
         list($iscalibrated, $time, $temperature, $angle, $battery, $recipe, $dens, $RSSI) = getlastValuesPlato4($conn, $row['Name']);
+// get data from $hours_ago
         list($iscalibrated, $time_ago, $temperature_ago, $angle_ago, $battery_ago, $recipe_ago, $dens_ago, $RSSI_ago) = getValuesHoursAgoPlato4($conn, $row['Name'], $time, $hours_ago);
         $gravity=getInitialGravity($conn, $row['Name']);
         if ($gravity[0]==1){
@@ -567,42 +680,46 @@ echo "<h2>$current_data</h2>";
         $realdens = 0.1808 * $initialgravity + 0.8192 * $dens;
         # calculate alcohol by weigth and by volume (fabbier calcfabbier calc for link see above)
         $ABV = (( 100 * ($realdens - $initialgravity) / (1.0665 * $initialgravity- 206.65))/0.795);
-        $Ddens = $dens_ago-$dens;
+// calculate delta denstiy
+        $Ddens = $dens-$dens_ago;
         }
         else {
         $initialgravity=0;
         $SVG=0;
-        $ABV=0;
-        $Ddens=0;
-        
         }
         echo "<tr>";
-        echo "<td><b>" . $row['Name'] . "</b></td>";
-        echo "<td>" . date("Y-m-d\ H:i:s\ ", $time) . "</td>";
-        echo "<td>" .  $recipe . "</td>";
-        echo "<td style='text-align:center'>" . number_format($angle,1) . "</td>";
-        echo "<td style='text-align:center'>" . number_format($temperature,1) . "</td>";
-        echo "<td style='text-align:center'>" . number_format($initialgravity,1) . "</td>";
-        echo "<td style='text-align:center'>" . number_format($dens,1) . "</td>";
-        echo "<td style='text-align:center'>" . number_format($Ddens,1) . "</td>";
-        echo "<td style='text-align:center'>" . number_format($SVG,1) . "</td>";
-        echo "<td style='text-align:center'>" . number_format($ABV,1) . "</td>";
-        echo "<td style='text-align:center'>" . number_format($battery,2) . "</td>";
-        echo "<td style='text-align:center'>" . number_format($RSSI,0) . "</td>";
-        echo "</tr>\n";
+        echo "<td style='text-align: left'><b>" . $row['Name'] . "</b></td>";
+        echo "<td style='text-align: left'>" . date("Y-m-d\ H:i:s\ ", $time) . "</td>";
+        echo "<td style='text-align: left'>" .  $recipe . "</td>";
+        echo "<td>" . number_format($angle,1) . "</td>";
+        echo "<td>" . number_format($temperature,1) . "</td>";
+        echo "<td>" . number_format($initialgravity,1) . "</td>";
+        echo "<td>" . number_format($dens,1) . "</td>";
+        echo "<td>" . number_format($Ddens,1) . "</td>";
+        echo "<td>" . number_format($SVG,1) . "</td>";
+        echo "<td>" . number_format($ABV,1) . "</td>";
+        echo "<td>" . number_format($battery,2) . "</td>";
+        echo "<td>" . number_format($RSSI,0) . "</td>";
+        echo "</tr>";
+        
+        
         }
     }
+echo "</tbody>";
 echo "</table>";
 }
-
-$sql_q = "SELECT Name FROM iGauge
+if($iGauge_exists != 0)
+{
+	
+	$sql_q = "SELECT Name FROM iGauge
         WHERE Timestamp > date_sub(NOW(), INTERVAL ".$daysago." DAY)
         Group by Name ORDER BY Name";
     	$result=mysqli_query($conn, $sql_q) or die(mysqli_error($conn));
     	if(mysqli_num_rows($result) > 0)
     	{
     		echo "<br><br><br>";
-    		echo "<table border='1'>";
+    		echo "<table class='$document_class'>";
+    		echo "<thead>";
     		echo "<tr>";
     		echo "<th><b>Device</b></th>";
     		echo "<th><b>$header_time</b></th>";
@@ -617,6 +734,8 @@ $sql_q = "SELECT Name FROM iGauge
     		//echo "<td><b>$header_battery [Volt]</b></td>";
     		//echo "<td><b>$header_wifi [dB]</b></td>";
     		echo "</tr>\n";
+    		echo "</thead>";
+    		echo "<tbody>";
     		while ($row = $result->fetch_assoc()) {
         	$sql_q="Select UNIX_TIMESTAMP(Timestamp) as Datum,Pressure,Temperature,Carbondioxid FROM iGauge WHERE NAME LIKE '" . $row['Name'] . "' Order BY Timestamp DESC Limit 1";
         	$result_data=mysqli_query($conn, $sql_q) or die(mysqli_error($conn));
@@ -635,12 +754,14 @@ $sql_q = "SELECT Name FROM iGauge
         	
         
         	}
+        	echo "</tbody>";
         	echo "</table>";
         	
     		
     		
     		
     }
+}
 
 
 ?>
@@ -648,11 +769,12 @@ $sql_q = "SELECT Name FROM iGauge
 <br/>
 <h2><?php echo $settings_header; ?></h2>
 
-
+<!-- Calibration and settings button  -->
 <span title="<?php echo($calibrate_spindle)?>"> <input type = "submit" id='calibrate' name = "Cal" value="<?php echo($calibrate_spindle)?>"></span>
 <span title="<?php echo($server_settings)?>"><input type = "submit" id='settings' name = "Set" value = "<?php echo($server_settings)?>"></span>
 <br/>
 <br/>
+<!-- Expert settings for talbe upgrades (only shown if checkbox is checked)  -->
 <input type = "checkbox" id="expert" value="0"  onchange="activate_expert()">
 <?php echo $expert_settings; ?> 
 <br/>
@@ -666,6 +788,7 @@ $sql_q = "SELECT Name FROM iGauge
 <span title="<?php echo($upgrade_settings)?>"><input type = "submit" id='up_settings' name = "Up_Set" value = "<?php echo($upgrade_settings)?>"></span>
 <?php echo($installed_version)?> <?php echo($installed_settings_version)?> | <?php echo($available_version)?> <?php echo(LATEST_SETTINGS_TABLE)?>
 
+<!-- Data table migration: only shown if recipe_id column does not exist in data table  -->
 <?php if ($exists == 0) { ?>
 <br/>
 <br/>

@@ -187,6 +187,63 @@ if (isset($_POST['Go']))
         exit;
         }
 
+// create IDS2 table 
+    $create_calibration = "CREATE TABLE `heizen` (
+                                                       `Index_` bigint(20) NOT NULL,
+                                                       `Timestamp` datetime NOT NULL DEFAULT current_timestamp(),
+                                                       `Name` varchar(64) COLLATE ascii_bin NOT NULL,
+                                                       `ID` int(11) NOT NULL,
+  `Sollwert` double NOT NULL,
+  `Temperature` double NOT NULL,
+  `Stellgrad` double NOT NULL,
+  `Restzeit` int(11) DEFAULT NULL,
+  `Change_value` double DEFAULT NULL,
+  `ResetFlag` tinyint(1) DEFAULT NULL,
+  `Gradient` double NOT NULL DEFAULT 0,
+  `UserToken` varchar(64) COLLATE ascii_bin DEFAULT NULL,
+  `Interval` int(11) DEFAULT NULL,
+  `RSSI` int(11) DEFAULT NULL,
+  `Recipe` varchar(64) COLLATE ascii_bin DEFAULT 'Muenchner Dunkel'
+) ENGINE=InnoDB DEFAULT CHARSET=ascii COLLATE=ascii_bin COMMENT='iSpindle Data';";
+       
+       if (mysqli_query($conn, $create_calibration)) {
+        $popup_string .= "IDS2 Table created successfully<br/>";
+        }
+    else {
+        echo "Error creating IDS2 Table " . mysqli_error($conn);
+        exit;
+        }
+       
+ // create eManometer table 
+       
+     $create_calibration = "CREATE TABLE `iGauge` (
+  `Index_` bigint(20) NOT NULL,
+  `Timestamp` datetime NOT NULL DEFAULT current_timestamp(),
+  `Name` varchar(64) COLLATE ascii_bin NOT NULL,
+  `ID` int(11) NOT NULL,
+  `Pressure` double NOT NULL,
+  `Temperature` double NOT NULL,
+  `Change_value` double DEFAULT NULL,
+  `ResetFlag` tinyint(1) DEFAULT NULL,
+  `First_value` tinyint(1) NOT NULL DEFAULT 0,
+  `Carbondioxid` double NOT NULL DEFAULT 0,
+  `UserToken` varchar(64) COLLATE ascii_bin DEFAULT NULL,
+  `Interval` int(11) DEFAULT NULL,
+  `RSSI` int(11) DEFAULT NULL,
+  `Recipe` varchar(64) COLLATE ascii_bin DEFAULT 'Muenchner Dunkel',
+  `Aktuell` int(1) DEFAULT 1
+) ENGINE=MyISAM DEFAULT CHARSET=ascii COLLATE=ascii_bin COMMENT='iSpindle Data';";
+       
+       if (mysqli_query($conn, $create_calibration)) {
+        $popup_string .= "eManometer Table created successfully<br/>";
+        }
+    else {
+        echo "Error creating eManometer Table " . mysqli_error($conn);
+        exit;
+        }
+       
+
+
 // create config table
     $create_config = "CREATE TABLE `Config` (
                      `ID` int(11) NOT NULL,

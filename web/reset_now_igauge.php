@@ -6,8 +6,8 @@ error_reporting(E_ALL | E_STRICT);
 // DB config values will be pulled from differtent location and user can personalize this file: common_db_config.php
 // If file does not exist, values will be pulled from default file
 
-if ((include_once './config/common_db_config.php') == FALSE){
-       include_once("./config/common_db_default.php");
+if ((include_once '../config/common_db_config.php') == FALSE){
+       include_once("../config/common_db_default.php");
      }
     include_once("include/common_db_query.php");
 
@@ -47,7 +47,7 @@ $valID='0';
 
 
 // set reset flag for spindel and write recipe name , '0' values for other parameters as 'NULL' values may cause a problem for some database configurations (strict SQL mode)
-$sql_select="UPDATE iGauge SET resetFlag=1 WHERE Index_ = (SELECT MAX(Index_) FROM iGauge WHERE Name = '".$Name."')";
+$sql_select="INSERT INTO iGauge (Timestamp, Name, ID, Pressure, Temperature, Carbondioxid, resetFlag, Recipe)VALUES (NOW(),'$Name', $valID, 0, 0, 0, true, '$Recipe')";
     mysqli_set_charset($conn, "utf8mb4");
 
  $q_sql = mysqli_query($conn, $sql_select)
